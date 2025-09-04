@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Sistema de Autenticação e Usuários
+model User {
+  id               Int              @id @default(autoincrement())
+  name             String
+  email            String           @unique
+  password_hash    String
+  role             Role             @default(USER)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  isActive         Boolean          @default(true)
+  lastLogin        DateTime?
+  resetToken       String?          @db.VarChar(255)
+  resetTokenExpiry DateTime?
+  documentAccesses DocumentAccess[]
+  uploadedDocs     Document[]
+
+  @@map("users")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  USER
+}
+
+// 2. Sistema de Gestão de Documentos
+model Document {
+  id            Int      @id @default(autoincrement())
+  title         String
+  description   String?
+  fileUrl       String // Link manual do Google Drive
+  fileType      FileType
+  size          String // Ex: "2.5 MB"
+  isActive      Boolean  @default(true)
+  downloadCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  userId        Int // Uploader
+  user          User     @relation(fields: [userId], references: [id])
+
+  accesses DocumentAccess[]
+}
+
+model DocumentAccess {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  documentId  Int
+  document    Document @relation(fields: [documentId], references: [id])
+  canView     Boolean  @default(true)
+  canDownload Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+enum FileType {
+  PDF
+  EXCEL
+  WORD
+  IMAGE
+  VIDEO
+  OTHER
+}
+
+// Adicione estas definições aos enums existentes
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+// Atualize os modelos para terem campos consistentes
+model Booking {
+  id            String        @id @default(uuid())
+  name          String
+  email         String
+  phone         String?
+  preferredDate DateTime
+  message       String?
+  status        BookingStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("bookings")
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+model StudySubscription {
+  id         String   @id @default(uuid())
+  name       String
+  email      String
+  contact    String
+  titleStudy String   @default("Socio-Economic Status & Perinatal Depression")
+  address    String
+  message    String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("study_subscriptions")
+}
+
+model ContactUser {
+  id        String    @id @unique @default(uuid())
+  name      String
+  email     String    @unique
+  phone     String
+  times     String
+  message   String
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+} 
