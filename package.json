@@ -6,7 +6,7 @@
     "type": "commonjs",
     "scripts": {
         "dev": "nodemon --exec ts-node src/server.ts",
-        "build": "tsc && ls -la dist",
+        "build": "tsc",
         "start": "node dist/server.js",
         "render-start": "yarn build && yarn start",
         "prisma:migrate": "prisma migrate dev --name init",

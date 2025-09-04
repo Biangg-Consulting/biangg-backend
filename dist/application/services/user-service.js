@@ -21,7 +21,8 @@ const getAllUsers = async (paginationOptions) => {
                 name: true,
                 email: true,
                 role: true,
-                createdAt: true
+                createdAt: true,
+                isActive: true,
             },
             orderBy: {
                 createdAt: 'desc'

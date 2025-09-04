@@ -32,12 +32,16 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteDocument = exports.updateDocument = exports.getAllDocuments = exports.getDocument = exports.downloadDocument = exports.uploadDocument = void 0;
+exports.deleteDocument = exports.updateDocument = exports.getAllDocuments = exports.getDocument = exports.incrementDownloadCount = exports.downloadDocument = exports.uploadDocument = void 0;
 const document_service_1 = require("@/application/services/document-service");
 const upload_1 = require("../middlewares/upload");
 const prisma_1 = require("@infra/database/prisma");
 const documentService = __importStar(require("@/application/services/document-service"));
+const cloudinary_1 = __importDefault(require("@/config/cloudinary"));
 exports.uploadDocument = [
     upload_1.upload.single('file'),
     async (req, res) => {
@@ -48,13 +52,13 @@ exports.uploadDocument = [
                     message: 'Unauthorized'
                 });
             }
-            const hasSpace = await (0, document_service_1.checkCloudinarySpace)();
             let fileUrl = req.body.driveUrl; // Link do Google Drive
-            if (hasSpace && req.file) {
-                // Usar Cloudinary se tiver espaço e arquivo foi enviado
-                fileUrl = req.file.secure_url;
+            // Se um arquivo foi enviado, usar ele (independente do espaço no Cloudinary)
+            if (req.file) {
+                fileUrl = req.file.path;
             }
-            else if (!fileUrl) {
+            // Se nenhum arquivo foi enviado e não tem link do Drive
+            if (!req.file && !fileUrl) {
                 return res.status(400).json({
                     success: false,
                     message: 'No file uploaded and no Google Drive link provided'
@@ -63,7 +67,7 @@ exports.uploadDocument = [
             const document = await (0, document_service_1.createDocument)({
                 title: req.body.title,
                 description: req.body.description,
-                fileUrl,
+                fileUrl: fileUrl,
                 fileType: req.body.fileType || 'OTHER',
                 size: req.file ? `${(req.file.size / (1024 * 1024)).toFixed(2)} MB` : 'N/A',
                 userId: req.user.id
@@ -95,28 +99,79 @@ const downloadDocument = async (req, res) => {
                 message: 'Document not found'
             });
         }
-        // Verificar permissões (implemente sua lógica de permissão aqui)
-        const hasAccess = true; // Substituir por verificação real
-        if (!hasAccess) {
-            return res.status(403).json({
-                success: false,
-                message: 'You do not have permission to access this document'
+        // Increment download count
+        await prisma_1.prisma.document.update({
+            where: { id: documentId },
+            data: {
+                downloadCount: {
+                    increment: 1
+                }
+            }
+        });
+        // Handle different file sources
+        if (document.fileUrl.includes('cloudinary')) {
+            // Extract public ID correctly
+            const urlParts = document.fileUrl.split('/upload/');
+            if (urlParts.length < 2) {
+                throw new Error('Invalid Cloudinary URL');
+            }
+            const publicIdWithParams = urlParts[1];
+            const publicId = publicIdWithParams.split('/').pop()?.split('.')[0];
+            if (!publicId) {
+                throw new Error('Could not extract public ID from URL');
+            }
+            // Generate download URL
+            const downloadUrl = cloudinary_1.default.url(publicId, {
+                resource_type: 'raw',
+                secure: true,
+                sign_url: true,
+                attachment: true,
+                flags: 'attachment',
+                type: 'authenticated'
+            });
+            return res.status(200).json({
+                success: true,
+                downloadUrl: downloadUrl,
+                filename: `${document.title.replace(/[^a-zA-Z0-9-_]/g, "_")}.${document.fileType.toLowerCase()}`
             });
         }
-        // Incrementar contador de downloads
-        await (0, document_service_1.incrementDownloadCount)(documentId);
-        // Redirecionar para o arquivo
-        res.redirect(document.fileUrl);
+        else {
+            // Handle direct URLs (Google Drive, etc.)
+            return res.status(200).json({
+                success: true,
+                downloadUrl: document.fileUrl,
+                filename: `${document.title.replace(/[^a-zA-Z0-9-_]/g, "_")}.${document.fileType.toLowerCase()}`
+            });
+        }
     }
     catch (error) {
         console.error('Download error:', error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: 'Failed to download document'
+            message: error instanceof Error ? error.message : 'Failed to generate download link'
         });
     }
 };
 exports.downloadDocument = downloadDocument;
+const incrementDownloadCount = async (req, res) => {
+    try {
+        const documentId = parseInt(req.params.id);
+        await prisma_1.prisma.document.update({
+            where: { id: documentId },
+            data: {
+                downloadCount: {
+                    increment: 1
+                }
+            }
+        });
+        res.status(200).json({ success: true });
+    }
+    catch (error) {
+        console.error('Increment download count error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update download count' });
+    }
+};
+exports.incrementDownloadCount = incrementDownloadCount;
 const getDocument = async (req, res) => {
     try {
         const documentId = parseInt(req.params.id);

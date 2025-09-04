@@ -13,10 +13,23 @@ const routes_1 = __importDefault(require("./infrastructure/http/routes"));
 const request_ip_1 = __importDefault(require("request-ip"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173', // Especifique a origem exata
-    credentials: true, // Permite credenciais (cookies, headers de autenticação)
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Métodos permitidos
-    allowedHeaders: ['Content-Type', 'Authorization'] // Headers permitidos
+    origin: (origin, callback) => {
+        const allowedOrigins = [
+            'http://localhost:5173',
+            'https://biangg.vercel.app',
+            'https://www.biangg.ca'
+        ];
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Disposition'] // Importante para downloads
 }));
 app.use((0, helmet_1.default)());
 app.use((0, morgan_1.default)('combined'));
